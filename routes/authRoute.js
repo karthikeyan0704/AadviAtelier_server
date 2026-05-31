@@ -1,5 +1,5 @@
 import express from 'express';
-import { login, register, getStaff, updateProfile, updateStaffProfile, deleteStaff, saveExpoPushToken } from '../controllers/AuthController.js';
+import { login, register, getStaff, updateProfile, updateStaffProfile, deleteStaff, saveExpoPushToken } from '../controllers/authController.js';
 import { protect, authorize } from '../middleware/auth.js';
 import { upload, uploadToCloudinary } from '../config/storage.js';
 
