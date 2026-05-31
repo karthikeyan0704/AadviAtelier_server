@@ -1,0 +1,12 @@
+node_modules/
+
+package-lock.json
+
+.env
+
+.vercel
+.env*.local
+
+# Ignore Google Cloud Service Account Key (CRITICAL SECURITY)
+config/gcs-key.json
+
