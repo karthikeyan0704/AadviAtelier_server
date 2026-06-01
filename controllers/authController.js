@@ -137,7 +137,7 @@ export const updateProfile = async (req, res) => {
 
 export const updateStaffProfile = async (req, res) => {
   const { id } = req.params;
-  const { name, mobileNumber, role } = req.body;
+  const { name, mobileNumber, role, profilePicture } = req.body;
   
   try {
     const staff = await User.findById(id);
@@ -151,7 +151,17 @@ export const updateStaffProfile = async (req, res) => {
 
     if (name) staff.name = name;
     if (role) staff.role = role;
-    if (req.body.profilePicture !== undefined) staff.profilePicture = req.body.profilePicture;
+    
+    // Handle base64 image
+    if (profilePicture && profilePicture.startsWith('data:image')) {
+      const uploadResponse = await cloudinary.uploader.upload(profilePicture, {
+        folder: 'aadvi-atelier',
+        resource_type: 'auto',
+      });
+      staff.profilePicture = uploadResponse.secure_url;
+    } else if (profilePicture === null) {
+      staff.profilePicture = null;
+    }
 
     await staff.save();
 
