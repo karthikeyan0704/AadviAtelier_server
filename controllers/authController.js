@@ -1,6 +1,7 @@
 import User from '../models/User.js';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
+import { v2 as cloudinary } from 'cloudinary';
 
 export const register = async (req, res) => {
   const { name, mobileNumber, password, role, secretKey } = req.body;
@@ -96,7 +97,7 @@ export const getStaff = async (req, res) => {
 };
 
 export const updateProfile = async (req, res) => {
-  const { name, mobileNumber, removeProfilePicture } = req.body || {};
+  const { name, mobileNumber, removeProfilePicture, profilePictureBase64 } = req.body || {};
   try {
     const user = await User.findById(req.user.id);
     if (!user) return res.status(404).json({ message: "User not found" });
@@ -109,7 +110,15 @@ export const updateProfile = async (req, res) => {
     }
 
     if (name) user.name = name;
-    if (req.file && req.file.path) {
+
+    // Handle Base64 image upload (bypassing multer)
+    if (profilePictureBase64) {
+      const uploadResponse = await cloudinary.uploader.upload(profilePictureBase64, {
+        folder: 'aadvi-atelier',
+        resource_type: 'auto',
+      });
+      user.profilePicture = uploadResponse.secure_url;
+    } else if (req.file && req.file.path) {
       user.profilePicture = req.file.path;
     } else if (removeProfilePicture === 'true') {
       user.profilePicture = null;
