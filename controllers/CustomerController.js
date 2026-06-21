@@ -28,6 +28,7 @@ export const createCustomer = async (req, res) => {
     await customer.save();
     res.status(201).json(customer);
   } catch (error) {
+    console.error('createCustomer error:', error.message, error.stack);
     res.status(500).json({ message: error.message });
   }
 };
