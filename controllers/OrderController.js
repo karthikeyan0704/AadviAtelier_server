@@ -103,15 +103,11 @@ export const createOrder = async (req, res) => {
     // Parse billing if it comes as a string
     let parsedBilling = typeof billing === 'string' ? JSON.parse(billing) : billing;
 
-    // Generate Order ID (Sequential: AAD-YYYYMMDD-0001)
-    const startOfDay = new Date();
-    startOfDay.setHours(0, 0, 0, 0);
-    const endOfDay = new Date();
-    endOfDay.setHours(23, 59, 59, 999);
+    const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
 
     const lastOrder = await Order.findOne({
-      createdAt: { $gte: startOfDay, $lte: endOfDay }
-    }).sort({ createdAt: -1 });
+      orderId: new RegExp(`^AAD-${dateStr}-`)
+    }).sort({ orderId: -1 });
 
     let sequenceNumber = 1;
     if (lastOrder && lastOrder.orderId) {
@@ -124,7 +120,6 @@ export const createOrder = async (req, res) => {
       }
     }
 
-    const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
     const sequenceStr = sequenceNumber.toString().padStart(4, '0');
     const orderId = `AAD-${dateStr}-${sequenceStr}`;
 
