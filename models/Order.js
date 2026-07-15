@@ -63,7 +63,9 @@ const orderSchema = new mongoose.Schema({
   dressType: { type: String, required: true },
   model: { type: String }, // e.g., "3 Dart Blouse", "Princess Blouse"
   referenceImage: { type: String },
+  referenceImages: [{ type: String }],
   sampleDressPhoto: { type: String },
+  sampleDressPhotos: [{ type: String }],
   audioInstruction: { type: String },
   description: String,
   fabricDetails: String,
@@ -76,6 +78,12 @@ const orderSchema = new mongoose.Schema({
   additionalCosts: { type: Number, default: 0 },
   trialDate: { type: Date },
   specialInstructions: String,
+  
+  extraCharges: [{
+    description: String,
+    amount: Number,
+    date: { type: Date, default: Date.now }
+  }],
   
   measurements: measurementSchema,
   

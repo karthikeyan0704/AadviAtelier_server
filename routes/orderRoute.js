@@ -22,7 +22,9 @@ const router = express.Router();
 router.route('/')
   .post(protect, upload.fields([
     { name: 'referenceImage', maxCount: 1 },
+    { name: 'referenceImages', maxCount: 5 },
     { name: 'sampleDressPhoto', maxCount: 1 },
+    { name: 'sampleDressPhotos', maxCount: 5 },
     { name: 'audioInstruction', maxCount: 1 }
   ]), uploadToCloudinary, createOrder)
   .get(protect, getOrders);

@@ -75,19 +75,34 @@ export const createOrder = async (req, res) => {
       stitchingPrice,
       trialDate,
       specialInstructions,
-      assignedTo
+      assignedTo,
+      additionalCosts
     } = req.body;
 
     let referenceImage = '';
+    let referenceImages = [];
     let sampleDressPhoto = '';
+    let sampleDressPhotos = [];
     let audioInstruction = '';
 
     if (req.files) {
       if (req.files.referenceImage) {
         referenceImage = req.files.referenceImage[0].path;
       }
+      if (req.files.referenceImages) {
+        referenceImages = req.files.referenceImages.map(f => f.path);
+        if (!referenceImage && referenceImages.length > 0) {
+          referenceImage = referenceImages[0];
+        }
+      }
       if (req.files.sampleDressPhoto) {
         sampleDressPhoto = req.files.sampleDressPhoto[0].path;
+      }
+      if (req.files.sampleDressPhotos) {
+        sampleDressPhotos = req.files.sampleDressPhotos.map(f => f.path);
+        if (!sampleDressPhoto && sampleDressPhotos.length > 0) {
+          sampleDressPhoto = sampleDressPhotos[0];
+        }
       }
       if (req.files.audioInstruction) {
         audioInstruction = req.files.audioInstruction[0].path;
@@ -140,7 +155,9 @@ export const createOrder = async (req, res) => {
       dressType,
       model,
       referenceImage,
+      referenceImages,
       sampleDressPhoto,
+      sampleDressPhotos,
       audioInstruction,
       description,
       fabricDetails,
@@ -159,7 +176,11 @@ export const createOrder = async (req, res) => {
         balanceDue: (parsedBilling.estimatedCost || 0) - (parsedBilling.advancePaid || 0)
       },
       assignedTo: assignedTo ? JSON.parse(assignedTo) : null,
-      createdBy: req.user ? req.user.id : null
+      createdBy: req.user ? req.user.id : null,
+      extraCharges: (additionalCosts && Number(additionalCosts) > 0) ? [{
+        description: description || 'Extra Charge',
+        amount: Number(additionalCosts)
+      }] : []
     });
 
     await order.save();
@@ -321,7 +342,7 @@ export const getWhatsAppLink = async (req, res) => {
     const { customer, orderId, status, workflow } = order;
     const currentStep = workflow.find(s => s.status === 'Pending') || workflow[workflow.length - 1];
     
-    const message = `Hello ${customer.name}, your order ${orderId} is currently: ${status}. \nCurrent stage: ${currentStep.step}. \nThank you for choosing Aadvi Boutique!`;
+    const message = `Hello ${customer.name}, your order ${orderId} is currently: ${status}. \nCurrent stage: ${currentStep.step}. \nThank you for choosing Aadvi Designer Studio!`;
     
     const encodedMessage = encodeURIComponent(message);
     const link = `https://wa.me/91${customer.mobileNumber.replace(/\D/g, '')}?text=${encodedMessage}`;
@@ -337,12 +358,17 @@ export const getInvoiceWhatsAppLink = async (req, res) => {
     const order = await Order.findById(req.params.id).populate('customer').lean();
     if (!order) return res.status(404).json({ message: 'Order not found' });
 
-    const { customer, orderId, billing, dressType, category, quantity } = order;
+    const { customer, orderId, billing, dressType, category, quantity, extraCharges } = order;
     
     let isEstimate = req.query.type === 'estimate';
     let title = isEstimate ? "🧾 *ESTIMATE INVOICE*" : "🧾 *FINAL INVOICE*";
     
-    const message = `*Aadvi Atelier*\n${title}\n\n*Order ID:* ${orderId}\n*Customer:* ${customer.name}\n*Item:* ${category} - ${dressType} (Qty: ${quantity})\n\n*Billing Details:*\nTotal Amount: ₹${billing?.estimatedCost || 0}\nTotal Paid: ₹${billing?.totalPaid || billing?.advancePaid || 0}\n*Balance Due:* ₹${billing?.balanceDue || 0}\n\nThank you for choosing Aadvi Atelier! 🙏`;
+    let extraChargeText = "";
+    if (extraCharges && extraCharges.length > 0) {
+      extraChargeText = "\n" + extraCharges.map(ec => `Extra (${ec.description}): ₹${ec.amount}`).join('\n');
+    }
+    
+    const message = `*Aadvi Designer Studio*\n${title}\n\n*Order ID:* ${orderId}\n*Customer:* ${customer.name}\n*Item:* ${category} - ${dressType} (Qty: ${quantity})\n\n*Billing Details:*\nStitching Price: ₹${(order.stitchingPrice || 0) * (quantity || 1)}${extraChargeText}\nTotal Amount: ₹${billing?.estimatedCost || 0}\nTotal Paid: ₹${billing?.totalPaid || billing?.advancePaid || 0}\n*Balance Due:* ₹${billing?.balanceDue || 0}\n\nThank you for choosing Aadvi Designer Studio! 🙏`;
     
     const encodedMessage = encodeURIComponent(message);
     const link = `https://wa.me/91${customer.mobileNumber.replace(/\D/g, '')}?text=${encodedMessage}`;
@@ -380,10 +406,11 @@ export const updateBill = async (req, res) => {
     order.billing.estimatedCost = order.billing.estimatedCost + addedCost;
     order.billing.balanceDue = order.billing.estimatedCost - (order.billing.totalPaid || order.billing.advancePaid || 0);
     
-    if (description) {
-      order.specialInstructions = order.specialInstructions 
-        ? order.specialInstructions + '\nExtra: ' + description 
-        : 'Extra: ' + description;
+    if (addedCost > 0) {
+      order.extraCharges.push({
+        description: description || 'Extra Work',
+        amount: addedCost
+      });
     }
     
     if (order.billing.balanceDue <= 0) {
