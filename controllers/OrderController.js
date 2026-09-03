@@ -177,10 +177,11 @@ export const createOrder = async (req, res) => {
       },
       assignedTo: assignedTo ? JSON.parse(assignedTo) : null,
       createdBy: req.user ? req.user.id : null,
-      extraCharges: (additionalCosts && Number(additionalCosts) > 0) ? [{
+      extraCharges: req.body.extraCharges ? JSON.parse(req.body.extraCharges) : (
+        (additionalCosts && Number(additionalCosts) > 0) ? [{
         description: description || 'Extra Charge',
         amount: Number(additionalCosts)
-      }] : []
+      }] : [])
     });
 
     await order.save();
