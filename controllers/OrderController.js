@@ -354,6 +354,63 @@ export const getWhatsAppLink = async (req, res) => {
   }
 };
 
+export const getPaymentLink = async (req, res) => {
+  try {
+    const order = await Order.findById(req.params.id).populate('customer').lean();
+    if (!order) return res.status(404).send('Order not found');
+    
+    const balanceDue = order.billing?.balanceDue || 0;
+    if (balanceDue <= 0) return res.send('<h3 style="text-align:center;margin-top:50px;font-family:sans-serif;">This order is already fully paid! Thank you.</h3>');
+
+    const upiId = 'sathyaatamilselvan-1@oksbi';
+    const upiName = 'Sathyaa Tamilselvan';
+    const upiUrl = `upi://pay?pa=${upiId}&pn=${encodeURIComponent(upiName)}&am=${balanceDue}&cu=INR`;
+    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(upiUrl)}`;
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>Pay Aadvi Designer Studio</title>
+        <style>
+          body { font-family: Arial, sans-serif; text-align: center; padding: 40px 20px; background: #f8f9fa; }
+          .container { max-width: 400px; margin: 0 auto; background: white; padding: 30px; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+          h2 { color: #5959be; margin-top: 0; }
+          .amount { font-size: 32px; font-weight: bold; color: #333; margin: 20px 0; }
+          .btn { display: block; background: #5959be; color: white; padding: 15px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 18px; margin-top: 20px; }
+          .qr-box { margin-top: 30px; border-top: 1px solid #eee; padding-top: 20px; }
+          img { max-width: 100%; border-radius: 12px; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <h2>Aadvi Designer Studio</h2>
+          <p>Payment for Order: <b>${order.orderId}</b></p>
+          <div class="amount">₹${balanceDue}</div>
+          
+          <a href="${upiUrl}" class="btn">Pay Now via UPI App</a>
+          
+          <div class="qr-box">
+            <p style="color: #666; font-size: 14px; margin-bottom: 15px;">Or scan this QR code from another device:</p>
+            <img src="${qrUrl}" alt="UPI QR Code" />
+          </div>
+        </div>
+        <script>
+          if (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+            window.location.href = "${upiUrl}";
+          }
+        </script>
+      </body>
+      </html>
+    `;
+
+    res.send(html);
+  } catch (error) {
+    res.status(500).send('Error loading payment page');
+  }
+};
+
 export const getInvoiceWhatsAppLink = async (req, res) => {
   try {
     const order = await Order.findById(req.params.id).populate('customer').lean();
@@ -374,12 +431,8 @@ export const getInvoiceWhatsAppLink = async (req, res) => {
     let message = `*Aadvi Designer Studio*\n${title}\n\n*Order ID:* ${orderId}\n*Customer:* ${customer.name}\n*Item:* ${category} - ${dressType} (Qty: ${quantity})\n\n*Billing Details:*\nStitching Price: ₹${(order.stitchingPrice || 0) * (quantity || 1)}${extraChargeText}\nTotal Amount: ₹${billing?.estimatedCost || 0}\nTotal Paid: ₹${billing?.totalPaid || billing?.advancePaid || 0}\n*Balance Due:* ₹${balanceDue}`;
 
     if (balanceDue > 0) {
-      const upiId = 'sathyaatamilselvan-1@oksbi';
-      const upiName = 'Sathyaa Tamilselvan';
-      const upiUrl = `upi://pay?pa=${upiId}&pn=${encodeURIComponent(upiName)}&am=${balanceDue}&cu=INR`;
-      const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(upiUrl)}`;
-      
-      message += `\n\n*Pay Balance via UPI:*\nClick the link below to see the QR code and pay the pending balance of ₹${balanceDue}:\n${qrUrl}`;
+      const paymentLink = `https://aadvi-atelier-server.vercel.app/api/orders/${order._id}/pay`;
+      message += `\n\n*Pay Balance via UPI:*\nClick the secure payment link below to automatically open GPay/PhonePe and pay the pending balance of ₹${balanceDue}:\n${paymentLink}`;
     }
 
     message += `\n\nThank you for choosing Aadvi Designer Studio! 🙏`;

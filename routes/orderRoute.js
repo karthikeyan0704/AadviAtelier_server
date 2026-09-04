@@ -12,7 +12,8 @@ import {
   getStaffOrders,
   getInvoiceWhatsAppLink,
   updateBill,
-  assignOrder
+  assignOrder,
+  getPaymentLink
 } from '../controllers/OrderController.js';
 import { protect } from '../middleware/auth.js';
 import { upload, uploadToCloudinary } from '../config/storage.js';
@@ -44,5 +45,6 @@ router.put('/:id/status', protect, updateOrderStatus);
 router.put('/:id/update-bill', protect, updateBill);
 router.get('/:id/whatsapp', protect, getWhatsAppLink);
 router.get('/:id/invoice-whatsapp', protect, getInvoiceWhatsAppLink);
+router.get('/:id/pay', getPaymentLink);
 
 export default router;
