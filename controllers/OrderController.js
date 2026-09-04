@@ -369,7 +369,20 @@ export const getInvoiceWhatsAppLink = async (req, res) => {
       extraChargeText = "\n" + extraCharges.map(ec => `Extra (${ec.description}): ₹${ec.amount}`).join('\n');
     }
     
-    const message = `*Aadvi Designer Studio*\n${title}\n\n*Order ID:* ${orderId}\n*Customer:* ${customer.name}\n*Item:* ${category} - ${dressType} (Qty: ${quantity})\n\n*Billing Details:*\nStitching Price: ₹${(order.stitchingPrice || 0) * (quantity || 1)}${extraChargeText}\nTotal Amount: ₹${billing?.estimatedCost || 0}\nTotal Paid: ₹${billing?.totalPaid || billing?.advancePaid || 0}\n*Balance Due:* ₹${billing?.balanceDue || 0}\n\nThank you for choosing Aadvi Designer Studio! 🙏`;
+    const balanceDue = billing?.balanceDue || 0;
+    
+    let message = `*Aadvi Designer Studio*\n${title}\n\n*Order ID:* ${orderId}\n*Customer:* ${customer.name}\n*Item:* ${category} - ${dressType} (Qty: ${quantity})\n\n*Billing Details:*\nStitching Price: ₹${(order.stitchingPrice || 0) * (quantity || 1)}${extraChargeText}\nTotal Amount: ₹${billing?.estimatedCost || 0}\nTotal Paid: ₹${billing?.totalPaid || billing?.advancePaid || 0}\n*Balance Due:* ₹${balanceDue}`;
+
+    if (balanceDue > 0) {
+      const upiId = 'sathyaatamilselvan-1@oksbi';
+      const upiName = 'Sathyaa Tamilselvan';
+      const upiUrl = `upi://pay?pa=${upiId}&pn=${encodeURIComponent(upiName)}&am=${balanceDue}&cu=INR`;
+      const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(upiUrl)}`;
+      
+      message += `\n\n*Pay Balance via UPI:*\nClick the link below to see the QR code and pay the pending balance of ₹${balanceDue}:\n${qrUrl}`;
+    }
+
+    message += `\n\nThank you for choosing Aadvi Designer Studio! 🙏`;
     
     const encodedMessage = encodeURIComponent(message);
     const link = `https://wa.me/91${customer.mobileNumber.replace(/\D/g, '')}?text=${encodedMessage}`;
