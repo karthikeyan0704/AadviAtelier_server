@@ -2,13 +2,34 @@ import User from '../models/User.js';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import { v2 as cloudinary } from 'cloudinary';
+import crypto from 'crypto';
+
+const createAccessToken = (user) => jwt.sign(
+  { id: user._id, role: user.role },
+  process.env.JWT_SECRET,
+  { expiresIn: '15m' },
+);
+
+const hashRefreshToken = (token) => crypto.createHash('sha256').update(token).digest('hex');
+
+const createRefreshToken = async (user) => {
+  const refreshToken = crypto.randomBytes(48).toString('base64url');
+  user.refreshTokenHash = hashRefreshToken(refreshToken);
+  user.refreshTokenExpiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+  await user.save();
+  return refreshToken;
+};
 
 export const register = async (req, res) => {
   const { name, mobileNumber, password, role, secretKey } = req.body;
 
   try {
-    // 1. If trying to register as owner, check secret key
+    // The owner can only be created once through the bootstrap flow. Staff
+    // accounts must be created by an authenticated owner or admin.
     if (role === 'owner') {
+      if (req.user) {
+        return res.status(403).json({ message: "Owner accounts cannot be managed through staff registration" });
+      }
       if (secretKey !== process.env.OWNER_SECRET_KEY) {
         return res.status(403).json({ message: "Invalid Owner Secret Key" });
       }
@@ -18,6 +39,8 @@ export const register = async (req, res) => {
       if (existingOwner) {
         return res.status(400).json({ message: "Owner already registered" });
       }
+    } else if (!req.user || !['owner', 'admin'].includes(req.user.role)) {
+      return res.status(403).json({ message: "Only owners and admins can create staff accounts" });
     }
 
     // 2. Check if mobileNumber already exists
@@ -52,10 +75,14 @@ export const register = async (req, res) => {
 
 export const deleteStaff = async (req, res) => {
   try {
-    const user = await User.findByIdAndDelete(req.params.id);
+    const user = await User.findById(req.params.id);
     if (!user) {
       return res.status(404).json({ message: "Staff not found" });
     }
+    if (user.role === 'owner') {
+      return res.status(403).json({ message: "The owner account cannot be deleted through staff management" });
+    }
+    await user.deleteOne();
     res.status(200).json({ message: "Staff deleted successfully" });
   } catch (error) {
     res.status(500).json({ message: "Server Error", error: error.message });
@@ -72,14 +99,12 @@ export const login = async (req, res) => {
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) return res.status(400).json({ message: "Invalid credentials" });
 
-    const token = jwt.sign(
-      { id: user._id, role: user.role }, 
-      process.env.JWT_SECRET, 
-      { expiresIn: '1d' }
-    );
+    const token = createAccessToken(user);
+    const refreshToken = await createRefreshToken(user);
 
     res.json({
       token,
+      refreshToken,
       user: { id: user._id, name: user.name, mobileNumber: user.mobileNumber, role: user.role, profilePicture: user.profilePicture }
     });
   } catch (err) {
@@ -142,6 +167,12 @@ export const updateStaffProfile = async (req, res) => {
   try {
     const staff = await User.findById(id);
     if (!staff) return res.status(404).json({ message: "Staff not found" });
+    if (staff.role === 'owner') {
+      return res.status(403).json({ message: "The owner account cannot be edited through staff management" });
+    }
+    if (role === 'owner') {
+      return res.status(400).json({ message: "Staff cannot be promoted to owner" });
+    }
 
     if (mobileNumber && mobileNumber !== staff.mobileNumber) {
       const mobileExists = await User.findOne({ mobileNumber });
@@ -183,6 +214,40 @@ export const saveExpoPushToken = async (req, res) => {
     user.expoPushToken = token;
     await user.save();
     res.json({ message: "Push token saved" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+export const refreshAccessToken = async (req, res) => {
+  try {
+    const { refreshToken } = req.body;
+    if (!refreshToken) return res.status(401).json({ message: 'Refresh token required' });
+
+    const user = await User.findOne({
+      refreshTokenHash: hashRefreshToken(refreshToken),
+      refreshTokenExpiresAt: { $gt: new Date() },
+    }).select('+refreshTokenHash +refreshTokenExpiresAt');
+    if (!user) return res.status(401).json({ message: 'Refresh token is invalid or expired' });
+
+    const token = createAccessToken(user);
+    const rotatedRefreshToken = await createRefreshToken(user);
+    res.json({ token, refreshToken: rotatedRefreshToken });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+export const logout = async (req, res) => {
+  try {
+    const { refreshToken } = req.body;
+    if (refreshToken) {
+      await User.updateOne(
+        { refreshTokenHash: hashRefreshToken(refreshToken) },
+        { $unset: { refreshTokenHash: 1, refreshTokenExpiresAt: 1 } },
+      );
+    }
+    res.status(200).json({ message: 'Logged out successfully' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

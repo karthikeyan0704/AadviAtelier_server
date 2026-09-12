@@ -10,7 +10,9 @@ const userSchema = new mongoose.Schema({
     enum: ['owner', 'admin', 'cutting_master', 'stitching_master'],
     default: 'admin'
   },
-  expoPushToken: { type: String }
+  expoPushToken: { type: String },
+  refreshTokenHash: { type: String, select: false },
+  refreshTokenExpiresAt: { type: Date, select: false }
 });
 
 const User = mongoose.model('User', userSchema);

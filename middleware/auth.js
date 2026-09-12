@@ -30,3 +30,13 @@ export const authorize = (...roles) => {
     next();
   };
 };
+
+// The first owner is intentionally bootstrapped with the owner secret. Every
+// other account creation must come from an authenticated owner or admin.
+export const protectStaffRegistration = (req, res, next) => {
+  if (req.body?.role === 'owner') {
+    return next();
+  }
+
+  return protect(req, res, next);
+};

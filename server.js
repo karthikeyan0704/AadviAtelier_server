@@ -7,6 +7,7 @@ import connectDB from './config/db.js';
 import authRoutes from './routes/authRoute.js';
 import customerRoutes from './routes/customerRoute.js';
 import orderRoutes from './routes/orderRoute.js';
+import notificationRoutes from './routes/notificationRoute.js';
 
 dotenv.config();
 
@@ -21,6 +22,7 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use('/api/auth', authRoutes);
 app.use('/api/customers', customerRoutes);
 app.use('/api/orders', orderRoutes);
+app.use('/api/notifications', notificationRoutes);
 app.get('/', (req, res) => {
   res.send('Aadvi Atelier API is running...');
 });
