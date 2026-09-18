@@ -22,5 +22,8 @@ const customerSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now }
 }, { timestamps: true });
 
+customerSchema.index({ mobileNumber: 1 });
+customerSchema.index({ name: 1 });
+
 const Customer = mongoose.model('Customer', customerSchema);
 export default Customer;

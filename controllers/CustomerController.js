@@ -96,11 +96,8 @@ export const getCustomerById = async (req, res) => {
       }
     }
 
-    console.log("[getCustomerById] orderQuery:", JSON.stringify(orderQuery));
-
     // Fetch related stats based on allowed orders
     const orders = await Order.find(orderQuery).sort({ createdAt: -1 }).lean();
-    console.log("[getCustomerById] orders found:", orders.length);
 
     // Masters may only open customers attached to at least one of their
     // assigned orders. Without this check, a guessed customer ID exposed the

@@ -13,8 +13,26 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
+const ALLOWED_MIME_TYPES = [
+  'image/jpeg', 'image/png', 'image/webp', 'image/gif',
+  'audio/mpeg', 'audio/mp4', 'audio/wav', 'audio/ogg', 'audio/webm',
+];
+
 const multerStorage = multer.memoryStorage();
-export const upload = multer({ storage: multerStorage });
+export const upload = multer({ 
+  storage: multerStorage,
+  limits: {
+    fileSize: 20 * 1024 * 1024,  // 20MB max per file
+    files: 15,
+  },
+  fileFilter: (req, file, cb) => {
+    if (ALLOWED_MIME_TYPES.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error(`File type not allowed: ${file.mimetype}`), false);
+    }
+  }
+});
 
 export const uploadToCloudinary = async (req, res, next) => {
   if (!req.files && !req.file) return next();
@@ -41,11 +59,13 @@ export const uploadToCloudinary = async (req, res, next) => {
     if (req.file) {
       await uploadFile(req.file);
     } else if (req.files) {
+      const uploadPromises = [];
       for (const fieldname in req.files) {
         for (const file of req.files[fieldname]) {
-          await uploadFile(file);
+          uploadPromises.push(uploadFile(file));
         }
       }
+      await Promise.all(uploadPromises);
     }
     next();
   } catch (error) {

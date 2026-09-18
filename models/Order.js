@@ -113,5 +113,13 @@ const orderSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now }
 }, { timestamps: true });
 
+// Add database indexes for performance optimization
+orderSchema.index({ 'assignedTo.cuttingMaster': 1, status: 1 });
+orderSchema.index({ 'assignedTo.stitchingMaster': 1, status: 1 });
+orderSchema.index({ createdAt: -1 });
+orderSchema.index({ deliveryDate: 1, status: 1 });
+orderSchema.index({ customer: 1, createdAt: -1 });
+orderSchema.index({ 'workflow.step': 1, 'workflow.status': 1 });
+
 const Order = mongoose.model('Order', orderSchema);
 export default Order;

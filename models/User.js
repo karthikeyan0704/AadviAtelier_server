@@ -15,5 +15,7 @@ const userSchema = new mongoose.Schema({
   refreshTokenExpiresAt: { type: Date, select: false }
 });
 
+userSchema.index({ role: 1 });
+
 const User = mongoose.model('User', userSchema);
-export default User;    
+export default User;

@@ -339,16 +339,14 @@ export const createOrder = async (req, res) => {
   }
 };
 
-export const getOrders = async (req, res) => {
+export const getOrders = async (req, res, next) => {
   try {
     const userId = req.user.id || req.user._id;
-    let userRole = req.user.role;
+    const userRole = req.user.role;
 
-    if (!userRole) {
-      const User = mongoose.model("User");
-      const dbUser = await User.findById(userId).lean();
-      if (dbUser) userRole = dbUser.role;
-    }
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 50;
+    const skip = (page - 1) * limit;
 
     let query = {};
     if (userRole === "cutting_master") {
@@ -361,13 +359,21 @@ export const getOrders = async (req, res) => {
       query = { _id: null };
     }
 
-    const orders = await Order.find(query)
-      .populate("customer")
-      .populate("createdBy", "name role")
-      .populate("assignedTo.cuttingMaster", "name")
-      .populate("assignedTo.stitchingMaster", "name")
-      .sort({ createdAt: -1 })
-      .lean();
+    const [orders, total] = await Promise.all([
+      Order.find(query)
+        .populate("customer")
+        .populate("createdBy", "name role")
+        .populate("assignedTo.cuttingMaster", "name")
+        .populate("assignedTo.stitchingMaster", "name")
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      Order.countDocuments(query),
+    ]);
+
+    res.set('X-Total-Count', total);
+    res.set('X-Total-Pages', Math.ceil(total / limit));
     res.status(200).json(orders);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -384,12 +390,7 @@ export const getOrderById = async (req, res) => {
 
     if (req.user) {
       const userId = req.user.id || req.user._id;
-      let userRole = req.user.role;
-      if (!userRole) {
-        const User = mongoose.model("User");
-        const dbUser = await User.findById(userId).lean();
-        if (dbUser) userRole = dbUser.role;
-      }
+      const userRole = req.user.role;
 
       if (
         userRole === "cutting_master" &&
@@ -546,16 +547,10 @@ export const updateOrderBilling = async (req, res) => {
   }
 };
 
-export const getDashboardStats = async (req, res) => {
+export const getDashboardStats = async (req, res, next) => {
   try {
     const userId = req.user.id || req.user._id;
-    let userRole = req.user.role;
-
-    if (!userRole) {
-      const User = mongoose.model("User");
-      const dbUser = await User.findById(userId).lean();
-      if (dbUser) userRole = dbUser.role;
-    }
+    const userRole = req.user.role;
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -573,53 +568,36 @@ export const getDashboardStats = async (req, res) => {
       baseQuery = { _id: null };
     }
 
-    const stats = {
-      todayDeliveries: await Order.countDocuments({
-        ...baseQuery,
-        deliveryDate: { $gte: today, $lt: tomorrow },
-      }),
-      pendingOrders: await Order.countDocuments({
-        ...baseQuery,
-        status: "Pending",
-      }),
-      draftOrders: await Order.countDocuments({
-        ...baseQuery,
-        status: "Draft",
-      }),
-      overdueOrders: await Order.countDocuments({
-        ...baseQuery,
-        deliveryDate: { $lt: today },
-        status: { $nin: ["Delivered", "Draft"] },
-        workflow: { $elemMatch: { status: "Pending" } },
-      }),
-      underStitching: await Order.countDocuments({
-        ...baseQuery,
-        $and: [
-          {
-            workflow: { $elemMatch: { step: "Cutting", status: "Completed" } },
-          },
-          {
-            workflow: { $elemMatch: { step: "Stitching", status: "Pending" } },
-          },
-        ],
-      }), // Cutting done, stitching pending
-      aariWorkPending: await Order.countDocuments({
-        ...baseQuery,
-        workflow: {
-          $elemMatch: { step: "Aari Work / Embroidery", status: "Pending" },
-        },
-      }),
-      completedOrders: await Order.countDocuments({
-        ...baseQuery,
-        status: "Delivered",
-      }),
-      paymentPending: await Order.countDocuments({
-        ...baseQuery,
-        "billing.paymentStatus": { $ne: "Paid" },
-      }),
-    };
+    const [
+      todayDeliveries,
+      pendingOrders,
+      draftOrders,
+      overdueOrders,
+      underStitching,
+      aariWorkPending,
+      completedOrders,
+      paymentPending,
+    ] = await Promise.all([
+      Order.countDocuments({ ...baseQuery, deliveryDate: { $gte: today, $lt: tomorrow } }),
+      Order.countDocuments({ ...baseQuery, status: 'Pending' }),
+      Order.countDocuments({ ...baseQuery, status: 'Draft' }),
+      Order.countDocuments({ ...baseQuery, deliveryDate: { $lt: today }, status: { $nin: ['Delivered', 'Draft'] }, workflow: { $elemMatch: { status: 'Pending' } } }),
+      Order.countDocuments({ ...baseQuery, $and: [{ workflow: { $elemMatch: { step: 'Cutting', status: 'Completed' } } }, { workflow: { $elemMatch: { step: 'Stitching', status: 'Pending' } } }] }),
+      Order.countDocuments({ ...baseQuery, workflow: { $elemMatch: { step: 'Aari Work / Embroidery', status: 'Pending' } } }),
+      Order.countDocuments({ ...baseQuery, status: 'Delivered' }),
+      Order.countDocuments({ ...baseQuery, 'billing.paymentStatus': { $ne: 'Paid' } }),
+    ]);
 
-    res.status(200).json(stats);
+    res.status(200).json({
+      todayDeliveries,
+      pendingOrders,
+      draftOrders,
+      overdueOrders,
+      underStitching,
+      aariWorkPending,
+      completedOrders,
+      paymentPending,
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -820,7 +798,7 @@ export const updateBill = async (req, res) => {
 export const deleteOrder = async (req, res) => {
   try {
     const userId = req.user.id || req.user._id;
-    const userRole = req.user.role || (await User.findById(userId).select("role").lean())?.role;
+    const userRole = req.user.role;
     if (userRole !== "owner" && userRole !== "admin") {
       return res.status(403).json({ message: "Only owners and admins can delete orders" });
     }
@@ -833,16 +811,14 @@ export const deleteOrder = async (req, res) => {
   }
 };
 
-export const getStaffOrders = async (req, res) => {
+export const getStaffOrders = async (req, res, next) => {
   try {
     const userId = req.user.id || req.user._id;
-    let userRole = req.user.role;
+    const userRole = req.user.role;
 
-    if (!userRole) {
-      const User = mongoose.model("User");
-      const dbUser = await User.findById(userId).lean();
-      if (dbUser) userRole = dbUser.role;
-    }
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 50;
+    const skip = (page - 1) * limit;
 
     let query = {};
     if (userRole === "cutting_master") {
@@ -855,10 +831,18 @@ export const getStaffOrders = async (req, res) => {
       query = { _id: null };
     }
 
-    const orders = await Order.find(query)
-      .populate("customer")
-      .sort({ createdAt: -1 })
-      .lean();
+    const [orders, total] = await Promise.all([
+      Order.find(query)
+        .populate("customer")
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      Order.countDocuments(query),
+    ]);
+    
+    res.set('X-Total-Count', total);
+    res.set('X-Total-Pages', Math.ceil(total / limit));
     res.status(200).json(orders);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -896,15 +880,12 @@ export const assignOrder = async (req, res) => {
     );
 
     // Send notifications to assigned staff
-    const tokens = [];
-    if (cuttingMaster) {
-      const cmUser = await User.findById(cuttingMaster);
-      if (cmUser && cmUser.expoPushToken) tokens.push(cmUser.expoPushToken);
-    }
-    if (stitchingMaster) {
-      const smUser = await User.findById(stitchingMaster);
-      if (smUser && smUser.expoPushToken) tokens.push(smUser.expoPushToken);
-    }
+    const userIds = [cuttingMaster, stitchingMaster].filter(Boolean);
+    const assignedUsers = await User.find({ _id: { $in: userIds } })
+      .select('expoPushToken')
+      .lean();
+    const tokens = assignedUsers.map(u => u.expoPushToken).filter(Boolean);
+    
     if (tokens.length > 0) {
       const shortId = order.orderId ? order.orderId.split("-").pop() : "";
       sendPushNotification(

@@ -1,6 +1,9 @@
 import express from 'express';
 import dotenv from 'dotenv';
 import cors from 'cors';
+import helmet from 'helmet';
+import compression from 'compression';
+import rateLimit from 'express-rate-limit';
 import connectDB from './config/db.js';
 
 
@@ -15,9 +18,38 @@ connectDB();
 
 const app = express();
 
-app.use(cors());
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ limit: '50mb', extended: true })); 
+app.use(helmet());
+app.use(compression());
+
+app.use(cors({
+  origin: [
+    'https://aadvi-atelier-server.vercel.app',
+    'http://localhost:3000'
+  ],
+  credentials: true,
+}));
+
+app.use(express.json({ limit: '5mb' }));
+app.use(express.urlencoded({ limit: '5mb', extended: true })); 
+
+const generalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, 
+  max: 200,                  
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: 'Too many requests, please try again later' }
+});
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,                   
+  message: { message: 'Too many login attempts, please try again later' }
+});
+
+app.use('/api/auth/login', authLimiter);
+app.use('/api/auth/register', authLimiter);
+app.use('/api/auth/refresh', authLimiter);
+app.use('/api', generalLimiter);
 
 app.use('/api/auth', authRoutes);
 app.use('/api/customers', customerRoutes);
@@ -29,8 +61,11 @@ app.get('/', (req, res) => {
 
 // Global error handler to catch Multer and other unhandled errors
 app.use((err, req, res, next) => {
-  console.error('Unhandled Error:', err);
-  res.status(500).json({ message: err.message || 'Internal Server Error', error: err });
+  console.error(`[ERROR] ${req.method} ${req.url}:`, err);
+  const isDev = process.env.NODE_ENV === 'development';
+  res.status(err.status || 500).json({ 
+    message: isDev ? err.message : 'Internal Server Error'
+  });
 });
 
 // Force restart
