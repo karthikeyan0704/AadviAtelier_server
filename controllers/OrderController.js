@@ -333,6 +333,28 @@ export const createOrder = async (req, res) => {
     });
 
     await order.save();
+
+    // Notify assigned staff if order is not a draft
+    if (!isDraft && order.assignedTo) {
+      const tokens = [];
+      if (order.assignedTo.cuttingMaster) {
+        const cmUser = await User.findById(order.assignedTo.cuttingMaster);
+        if (cmUser && cmUser.expoPushToken) tokens.push(cmUser.expoPushToken);
+      }
+      if (order.assignedTo.stitchingMaster) {
+        const smUser = await User.findById(order.assignedTo.stitchingMaster);
+        if (smUser && smUser.expoPushToken) tokens.push(smUser.expoPushToken);
+      }
+      if (tokens.length > 0) {
+        const shortId = order.orderId ? order.orderId.split("-").pop() : "";
+        await sendPushNotification(
+          tokens,
+          "New Work Assigned ✂️",
+          `Order #${shortId} has been assigned to you.`,
+        );
+      }
+    }
+
     res.status(201).json(order);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -503,7 +525,7 @@ export const updateOrderWorkflow = async (req, res) => {
         const tokens = owners.map((o) => o.expoPushToken).filter(Boolean);
         if (tokens.length > 0) {
           const shortId = order.orderId ? order.orderId.split("-").pop() : "";
-          sendPushNotification(
+          await sendPushNotification(
             tokens,
             "Task Completed ✅",
             `${order.workflow[stepIndex].step} completed by ${req.user.name || "Staff"} for Order #${shortId}`,
@@ -907,7 +929,7 @@ export const assignOrder = async (req, res) => {
     }
     if (tokens.length > 0) {
       const shortId = order.orderId ? order.orderId.split("-").pop() : "";
-      sendPushNotification(
+      await sendPushNotification(
         tokens,
         "New Work Assigned ✂️",
         `Order #${shortId} has been assigned to you.`,
