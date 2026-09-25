@@ -14,9 +14,17 @@ import notificationRoutes from './routes/notificationRoute.js';
 
 dotenv.config();
 
-connectDB();
-
 const app = express();
+app.set('trust proxy', 1);
+
+app.use(async (req, res, next) => {
+  try {
+    await connectDB();
+    next();
+  } catch (error) {
+    next(error);
+  }
+});
 
 app.use(helmet());
 app.use(compression());
